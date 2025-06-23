@@ -1,46 +1,137 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Cursor Google 账户删除工具
+
+这个脚本用于自动删除通过 Google OAuth 认证的 Cursor 账户。
+脚本会自动打开浏览器，引导用户完成 Google 登录，然后自动导航到
+Cursor 设置页面并执行账户删除操作。
+
+主要功能：
+- 自动化 Google OAuth 登录流程
+- 导航到 Cursor 设置页面的高级选项
+- 自动点击删除账户按钮
+- 处理删除确认对话框
+- 完成账户永久删除
+
+使用方法：
+1. 直接运行: python delete_cursor_google.py
+2. 作为模块导入: from delete_cursor_google import CursorGoogleAccountDeleter
+
+注意事项：
+- 此操作不可逆，删除后无法恢复账户
+- 需要有效的 Google 账户用于登录
+- 确保网络连接稳定
+- 建议在删除前备份重要数据
+
+依赖模块：
+- oauth_auth: OAuth 认证处理基类
+- colorama: 彩色终端输出
+- time: 时间延迟控制
+- sys: 系统相关功能
+
+作者: yeongpin
+GitHub: https://github.com/yeongpin/cursor-free-vip
+"""
+
 from oauth_auth import OAuthHandler
 import time
 from colorama import Fore, Style, init
 import sys
 
-# Initialize colorama
+# 初始化 colorama 用于彩色终端输出
 init()
 
-# Define emoji constants
+# 定义表情符号常量，用于美化终端输出
 EMOJI = {
-    'START': '🚀',
-    'DELETE': '🗑️',
-    'SUCCESS': '✅',
-    'ERROR': '❌',
-    'WAIT': '⏳',
-    'INFO': 'ℹ️',
-    'WARNING': '⚠️'
+    'START': '🚀',      # 开始图标
+    'DELETE': '🗑️',     # 删除图标
+    'SUCCESS': '✅',    # 成功图标
+    'ERROR': '❌',      # 错误图标
+    'WAIT': '⏳',       # 等待图标
+    'INFO': 'ℹ️',       # 信息图标
+    'WARNING': '⚠️'     # 警告图标
 }
 
 class CursorGoogleAccountDeleter(OAuthHandler):
+    """
+    Cursor Google 账户删除器
+    
+    这个类继承自 OAuthHandler，专门用于处理通过 Google OAuth 认证的
+    Cursor 账户删除操作。它封装了完整的删除流程，包括登录、导航、
+    确认和执行删除操作。
+    
+    继承关系：
+    - 继承自 OAuthHandler 类，获得浏览器自动化和 OAuth 处理能力
+    - 专门针对 Google 认证方式进行优化
+    
+    主要方法：
+    - delete_google_account(): 执行完整的账户删除流程
+    
+    使用示例：
+        deleter = CursorGoogleAccountDeleter(translator)
+        success = deleter.delete_google_account()
+    """
+    
     def __init__(self, translator=None):
+        """
+        初始化 Google 账户删除器
+        
+        Args:
+            translator: 可选的翻译器对象，用于国际化消息显示
+        
+        Note:
+            - 自动设置认证类型为 'google'
+            - 继承父类的浏览器自动化功能
+        """
         super().__init__(translator, auth_type='google')
         
     def delete_google_account(self):
-        """Delete Cursor account using Google OAuth"""
+        """
+        删除 Cursor 账户（使用 Google OAuth 认证）
+        
+        这个方法执行完整的账户删除流程，包括：
+        1. 设置浏览器和选择配置文件
+        2. 导航到 Cursor 认证页面
+        3. 执行 Google OAuth 登录
+        4. 等待认证完成
+        5. 导航到设置页面
+        6. 点击高级选项
+        7. 找到并点击删除账户按钮
+        8. 处理确认对话框
+        9. 完成账户删除
+        
+        Returns:
+            bool: 删除成功返回 True，失败返回 False
+            
+        Raises:
+            Exception: 当关键步骤失败时抛出异常
+            
+        Note:
+            - 此操作不可逆，请谨慎使用
+            - 需要用户手动选择 Google 账户
+            - 整个过程可能需要 2-3 分钟
+            - 网络不稳定可能导致超时
+        """
         try:
-            # Setup browser and select profile
+            # 设置浏览器并选择配置文件
             if not self.setup_browser():
                 return False
                 
             print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('account_delete.starting_process') if self.translator else 'Starting account deletion process...'}{Style.RESET_ALL}")
             
-            # Navigate to Cursor auth page - using the same URL as in registration
+            # 导航到 Cursor 认证页面（使用与注册相同的 URL）
             self.browser.get("https://authenticator.cursor.sh/sign-up")
             time.sleep(2)
             
-            # Click Google auth button using same selectors as in registration
+            # 使用与注册相同的选择器点击 Google 认证按钮
             selectors = [
-                "//a[contains(@href,'GoogleOAuth')]",
-                "//a[contains(@class,'auth-method-button') and contains(@href,'GoogleOAuth')]",
-                "(//a[contains(@class,'auth-method-button')])[1]"  # First auth button as fallback
+                "//a[contains(@href,'GoogleOAuth')]",  # 包含 GoogleOAuth 的链接
+                "//a[contains(@class,'auth-method-button') and contains(@href,'GoogleOAuth')]",  # 认证方法按钮
+                "(//a[contains(@class,'auth-method-button')])[1]"  # 第一个认证按钮作为备选
             ]
             
+            # 尝试找到 Google 认证按钮
             auth_btn = None
             for selector in selectors:
                 try:
@@ -54,82 +145,115 @@ class CursorGoogleAccountDeleter(OAuthHandler):
                 raise Exception(self.translator.get('account_delete.google_button_not_found') if self.translator else "Google login button not found")
                 
             print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('account_delete.logging_in') if self.translator else 'Logging in with Google...'}{Style.RESET_ALL}")
-            auth_btn.click()
+            auth_btn.click()  # 点击 Google 登录按钮
             
-            # Wait for authentication to complete using a more robust method
+            # 使用更强健的方法等待认证完成
             print(f"{Fore.CYAN}{EMOJI['WAIT']} {self.translator.get('account_delete.waiting_for_auth', fallback='Waiting for Google authentication...')}{Style.RESET_ALL}")
             
-            # Dynamic wait for authentication
-            max_wait_time = 120  # Increase maximum wait time to 120 seconds
+            # 动态等待认证完成
+            max_wait_time = 120  # 增加最大等待时间到 120 秒
             start_time = time.time()
-            check_interval = 3  # Check every 3 seconds
-            google_account_alert_shown = False  # Track if we've shown the alert already
+            check_interval = 3  # 每 3 秒检查一次
+            google_account_alert_shown = False  # 跟踪是否已经显示过提醒
             
             while time.time() - start_time < max_wait_time:
                 current_url = self.browser.url
                 
-                # If we're already on the settings or dashboard page, we're successful
+                # 如果已经在设置或仪表板页面，说明登录成功
                 if "/dashboard" in current_url or "/settings" in current_url or "cursor.com" in current_url:
                     print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {self.translator.get('account_delete.login_successful') if self.translator else 'Login successful'}{Style.RESET_ALL}")
                     break
                     
-                # If we're on Google accounts page or accounts.google.com, wait for user selection
+                # 如果在 Google 账户页面，等待用户选择账户
                 if "accounts.google.com" in current_url:
-                    # Only show the alert once to avoid spamming
+                    # 只显示一次提醒以避免重复
                     if not google_account_alert_shown:
                         print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('account_delete.select_google_account', fallback='Please select your Google account...')}{Style.RESET_ALL}")
-                        # Alert to indicate user action needed
+                        # 显示提醒表示需要用户操作
                         try:
                             self.browser.run_js("""
                             alert('Please select your Google account to continue with Cursor authentication');
                             """)
-                            google_account_alert_shown = True  # Mark that we've shown the alert
+                            google_account_alert_shown = True  # 标记已经显示过提醒
                         except:
-                            pass  # Alert is optional
+                            pass  # 提醒是可选的
                 
-                # Sleep before checking again
+                # 等待一段时间后再次检查
                 time.sleep(check_interval)
             else:
-                # If the loop completed without breaking, it means we hit the timeout
+                # 如果循环完成而没有中断，说明超时了
                 print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('account_delete.auth_timeout', fallback='Authentication timeout, continuing anyway...')}{Style.RESET_ALL}")
             
-            # Check current URL to determine next steps
+            # 检查当前 URL 以确定下一步操作
             current_url = self.browser.url
             
-            # If we're already on the settings page, no need to navigate
+            # 如果已经在设置页面，无需导航
             if "/settings" in current_url and "cursor.com" in current_url:
                 print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {self.translator.get('account_delete.already_on_settings', fallback='Already on settings page')}{Style.RESET_ALL}")
-            # If we're on the dashboard or any Cursor page but not settings, navigate to settings
+            # 如果在仪表板或其他 Cursor 页面但不是设置页面，导航到设置
             elif "cursor.com" in current_url or "authenticator.cursor.sh" in current_url:
                 print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('account_delete.navigating_to_settings', fallback='Navigating to settings page...')}{Style.RESET_ALL}")
                 self.browser.get("https://www.cursor.com/settings")
-            # If we're still on Google auth or somewhere else, try directly going to settings
+            # 如果仍在 Google 认证或其他地方，尝试直接导航到设置
             else:
                 print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('account_delete.login_redirect_failed', fallback='Login redirection failed, trying direct navigation...')}{Style.RESET_ALL}")
                 self.browser.get("https://www.cursor.com/settings")
                 
-            # Wait for the settings page to load
-            time.sleep(3)  # Reduced from 5 seconds
+            # 等待设置页面加载
+            time.sleep(3)  # 从 5 秒减少到 3 秒
             
-            # First look for the email element to confirm we're logged in
+            # 首先查找邮箱元素以确认已登录
+            email_element = None
             try:
-                email_element = self.browser.ele("css:div[class='flex w-full flex-col gap-2'] div:nth-child(2) p:nth-child(2)")
-                if email_element:
-                    email = email_element.text
-                    print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('account_delete.found_email', email=email, fallback=f'Found email: {email}')}{Style.RESET_ALL}")
+                # 尝试多个选择器查找邮箱元素
+                email_selectors = [
+                    "[data-testid='user-email']",
+                    "[data-testid='email']",
+                    "span[class*='email']",
+                    "div[class*='email']",
+                    "p[class*='email']",
+                    "span:contains('@')",
+                    "div:contains('@')",
+                    "p:contains('@')"
+                ]
+                
+                for selector in email_selectors:
+                    try:
+                        email_element = self.browser.find(selector, timeout=2)
+                        if email_element and '@' in email_element.text:
+                            print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {self.translator.get('account_delete.logged_in_as', fallback='Logged in as')}: {email_element.text}{Style.RESET_ALL}")
+                            break
+                    except:
+                        continue
+                        
             except Exception as e:
-                print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('account_delete.email_not_found', error=str(e), fallback=f'Email not found: {str(e)}')}{Style.RESET_ALL}")
+                print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('account_delete.email_check_failed', fallback='Could not verify email, continuing...')}{Style.RESET_ALL}")
             
-            # Click on "Advanced" tab or dropdown - keep only the successful approach
+            # 使用多种策略查找删除账户按钮
+            delete_button = None
+            delete_selectors = [
+                "button:contains('Delete Account')",
+                "button:contains('delete account')",
+                "button:contains('Delete')",
+                "a:contains('Delete Account')",
+                "a:contains('delete account')",
+                "[data-testid='delete-account']",
+                "[data-testid='delete-account-button']",
+                "button[class*='delete']",
+                "button[class*='danger']",
+                "button[class*='destructive']"
+            ]
+            
+            # 点击"高级"选项卡或下拉菜单 - 保留成功的方法
             advanced_found = False
             
-            # Direct JavaScript querySelector approach that worked according to logs
+            # 根据日志记录，使用直接的 JavaScript querySelector 方法
             try:
                 advanced_element_js = self.browser.run_js("""
-                    // Try to find the Advanced dropdown using querySelector with the exact classes
+                    // 尝试使用精确的类名查找高级下拉菜单
                     let advancedElement = document.querySelector('div.mb-0.flex.cursor-pointer.items-center.text-xs:not([style*="display: none"])');
                     
-                    // If not found, try a more general approach
+                    // 如果未找到，尝试更通用的方法
                     if (!advancedElement) {
                         const allDivs = document.querySelectorAll('div');
                         for (const div of allDivs) {
@@ -143,7 +267,7 @@ class CursorGoogleAccountDeleter(OAuthHandler):
                         }
                     }
                     
-                    // Click the element if found
+                    // 如果找到元素则点击
                     if (advancedElement) {
                         advancedElement.click();
                         return true;
@@ -155,12 +279,12 @@ class CursorGoogleAccountDeleter(OAuthHandler):
                 if advanced_element_js:
                     print(f"{Fore.GREEN}{EMOJI['SUCCESS']} {self.translator.get('account_delete.advanced_tab_clicked', fallback='Found and clicked Advanced using direct JavaScript selector')}{Style.RESET_ALL}")
                     advanced_found = True
-                    time.sleep(1)  # Reduced from 2 seconds
+                    time.sleep(1)  # 从 2 秒减少到 1 秒
             except Exception as e:
                 print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('account_delete.advanced_tab_error', error=str(e), fallback='JavaScript querySelector approach failed: {str(e)}')}{Style.RESET_ALL}")
             
             if not advanced_found:
-                # Fallback to direct URL navigation which is faster and more reliable
+                # 备用方案：直接 URL 导航，更快更可靠
                 try:
                     self.browser.get("https://www.cursor.com/settings?tab=advanced")
                     print(f"{Fore.YELLOW}{EMOJI['INFO']} {self.translator.get('account_delete.direct_advanced_navigation', fallback='Trying direct navigation to advanced tab')}{Style.RESET_ALL}")
@@ -168,13 +292,13 @@ class CursorGoogleAccountDeleter(OAuthHandler):
                 except:
                     raise Exception(self.translator.get('account_delete.advanced_tab_not_found') if self.translator else "Advanced option not found after multiple attempts")
             
-            # Wait for dropdown/tab content to load
-            time.sleep(2)  # Reduced from 4 seconds
+            # 等待下拉菜单/选项卡内容加载
+            time.sleep(2)  # 从 4 秒减少到 2 秒
             
-            # Find and click the "Delete Account" button 
+            # 查找并点击"删除账户"按钮
             delete_button_found = False
             
-            # Simplified approach for delete button based on what worked
+            # 基于有效方法的简化删除按钮查找方式
             delete_button_selectors = [
                 'xpath://button[contains(., "Delete Account")]',
                 'xpath://button[text()="Delete Account"]',
@@ -196,13 +320,13 @@ class CursorGoogleAccountDeleter(OAuthHandler):
             if not delete_button_found:
                 raise Exception(self.translator.get('account_delete.delete_button_not_found') if self.translator else "Delete Account button not found")
             
-            # Wait for confirmation dialog to appear
+            # 等待确认对话框出现
             time.sleep(2)
             
-            # Check if we need to input "Delete" at all - some modals might not require it
+            # 检查是否需要输入"Delete" - 某些模态框可能不需要
             input_required = True
             try:
-                # Try detecting if the DELETE button is already enabled
+                # 尝试检测 DELETE 按钮是否已启用
                 delete_button_enabled = self.browser.run_js("""
                     const buttons = Array.from(document.querySelectorAll('button'));
                     const deleteButtons = buttons.filter(btn => 
@@ -222,11 +346,11 @@ class CursorGoogleAccountDeleter(OAuthHandler):
             except:
                 pass
             
-            # Type "Delete" in the confirmation input - only if required
+            # 在确认输入框中输入"Delete" - 仅在需要时
             delete_input_found = False
             
             if input_required:
-                # Try common selectors for the input field
+                # 尝试常见的输入框选择器
                 delete_input_selectors = [
                     'xpath://input[@placeholder="Delete"]',
                     'xpath://div[contains(@class, "modal")]//input',
@@ -245,7 +369,7 @@ class CursorGoogleAccountDeleter(OAuthHandler):
                             time.sleep(2)
                             break
                     except:
-                        # Try direct JavaScript input as fallback
+                        # 备用方案：使用直接的 JavaScript 输入
                         try:
                             self.browser.run_js(r"""
                                 arguments[0].value = "Delete";
@@ -265,16 +389,16 @@ class CursorGoogleAccountDeleter(OAuthHandler):
                     print(f"{Fore.YELLOW}{EMOJI['WARNING']} {self.translator.get('account_delete.delete_input_not_found', fallback='Delete confirmation input not found, continuing anyway')}{Style.RESET_ALL}")
                     time.sleep(2)
             
-            # Wait before clicking the final DELETE button
+            # 点击最终删除按钮前等待
             time.sleep(2)
             
-            # Click on the final DELETE button
+            # 点击最终的删除按钮
             confirm_button_found = False
             
-            # Use JavaScript approach for the DELETE button
+            # 使用 JavaScript 方法查找删除按钮
             try:
                 delete_button_js = self.browser.run_js("""
-                    // Try to find the DELETE button by exact text content
+                    // 尝试通过精确的文本内容查找删除按钮
                     const buttons = Array.from(document.querySelectorAll('button'));
                     const deleteButton = buttons.find(btn => 
                         btn.textContent.trim() === 'DELETE' || 
@@ -287,7 +411,7 @@ class CursorGoogleAccountDeleter(OAuthHandler):
                         return true;
                     }
                     
-                    // If not found by text, try to find right-most button in the modal
+                    // 如果通过文本未找到，尝试查找模态框中最右侧的按钮
                     const modalButtons = Array.from(document.querySelectorAll('.relative button, [role="dialog"] button, .modal button, [aria-modal="true"] button'));
                     
                     if (modalButtons.length > 1) {
@@ -316,7 +440,7 @@ class CursorGoogleAccountDeleter(OAuthHandler):
                 pass
             
             if not confirm_button_found:
-                # Fallback to simple selectors
+                # 备用方案：使用简单选择器
                 delete_button_selectors = [
                     'xpath://button[text()="DELETE"]',
                     'xpath://div[contains(@class, "modal")]//button[last()]'
@@ -336,7 +460,7 @@ class CursorGoogleAccountDeleter(OAuthHandler):
             if not confirm_button_found:
                 raise Exception(self.translator.get('account_delete.confirm_button_not_found') if self.translator else "Confirm button not found")
             
-            # Wait a moment to see the confirmation
+            # 等待一会儿查看确认结果
             time.sleep(2)
             
             return True
@@ -345,7 +469,7 @@ class CursorGoogleAccountDeleter(OAuthHandler):
             print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('account_delete.error', error=str(e)) if self.translator else f'Error during account deletion: {str(e)}'}{Style.RESET_ALL}")
             return False
         finally:
-            # Clean up browser
+            # 清理浏览器资源
             if self.browser:
                 try:
                     self.browser.quit()
@@ -353,14 +477,25 @@ class CursorGoogleAccountDeleter(OAuthHandler):
                     pass
             
 def main(translator=None):
-    """Main function to handle Google account deletion"""
+    """
+    主函数：处理 Google 账户删除
+    
+    参数:
+        translator: 翻译器对象，用于多语言支持
+    
+    功能:
+        1. 显示警告信息
+        2. 请求用户确认
+        3. 执行账户删除流程
+        4. 处理异常和中断
+    """
     print(f"\n{Fore.CYAN}{EMOJI['START']} {translator.get('account_delete.title') if translator else 'Cursor Google Account Deletion Tool'}{Style.RESET_ALL}")
     print(f"{Fore.YELLOW}{'─' * 50}{Style.RESET_ALL}")
     
     deleter = CursorGoogleAccountDeleter(translator)
     
     try:
-        # Ask for confirmation
+        # 请求用户确认
         print(f"{Fore.RED}{EMOJI['WARNING']} {translator.get('account_delete.warning') if translator else 'WARNING: This will permanently delete your Cursor account. This action cannot be undone.'}{Style.RESET_ALL}")
         confirm = input(f"{Fore.RED} {translator.get('account_delete.confirm_prompt') if translator else 'Are you sure you want to proceed? (y/N): '}{Style.RESET_ALL}").lower()
         
@@ -368,6 +503,7 @@ def main(translator=None):
             print(f"{Fore.YELLOW}{EMOJI['INFO']} {translator.get('account_delete.cancelled') if translator else 'Account deletion cancelled.'}{Style.RESET_ALL}")
             return
             
+        # 执行删除操作
         success = deleter.delete_google_account()
         
         if success:
@@ -382,5 +518,6 @@ def main(translator=None):
     finally:
         print(f"{Fore.YELLOW}{'─' * 50}{Style.RESET_ALL}")
 
+# 脚本入口点：当文件作为独立程序运行时执行主函数
 if __name__ == "__main__":
-    main() 
+    main()

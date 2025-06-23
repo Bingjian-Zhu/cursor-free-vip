@@ -1,3 +1,32 @@
+# -*- coding: utf-8 -*-
+"""
+Cursor 完全重置工具 (Cursor Complete Reset Tool)
+
+这个脚本用于完全重置 Cursor 编辑器的机器标识符，包括：
+- 重置机器标识符 : 生成新的 UUID、机器 ID、Mac 机器 ID 等
+- 更新配置文件 : 修改 JSON 配置和 SQLite 数据库
+- 系统级重置 : 更新 Windows 注册表或 macOS 系统标识符
+- JavaScript 补丁 : 修改 Cursor 的核心 JS 文件
+- 备份机制 : 自动备份原始文件
+
+支持的操作系统：
+- Windows (win32)
+- macOS (darwin) 
+- Linux
+
+使用方法：
+1. 直接运行: python totally_reset_cursor.py
+2. 作为模块导入: from totally_reset_cursor import run; run(translator)
+
+注意事项：
+- 在某些系统上可能需要管理员权限
+- 运行前请确保 Cursor 编辑器已关闭
+- 脚本会自动创建备份文件
+
+作者: yeongpin
+GitHub: https://github.com/yeongpin/cursor-free-vip
+"""
+
 import os
 import sys
 import json
@@ -15,58 +44,86 @@ import traceback
 from config import get_config
 import glob
 
-# Initialize colorama
+# 初始化 colorama 用于彩色终端输出
 init()
 
-# Define emoji constants
+# 定义表情符号常量，用于美化终端输出
 EMOJI = {
-    "FILE": "📄",
-    "BACKUP": "💾",
-    "SUCCESS": "✅",
-    "ERROR": "❌",
-    "INFO": "ℹ️",
-    "RESET": "🔄",
-    "WARNING": "⚠️",
+    "FILE": "📄",      # 文件操作
+    "BACKUP": "💾",    # 备份操作
+    "SUCCESS": "✅",   # 成功状态
+    "ERROR": "❌",     # 错误状态
+    "INFO": "ℹ️",      # 信息提示
+    "RESET": "🔄",     # 重置操作
+    "WARNING": "⚠️",   # 警告信息
 }
 
 def get_user_documents_path():
-     """Get user Documents folder path"""
-     if sys.platform == "win32":
-         try:
-             import winreg
-             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders") as key:
-                 documents_path, _ = winreg.QueryValueEx(key, "Personal")
-                 return documents_path
-         except Exception as e:
-             return os.path.join(os.path.expanduser("~"), "Documents")
-     elif sys.platform == "darwin":
-         return os.path.join(os.path.expanduser("~"), "Documents")
-     else:  # Linux
-         # Get actual user's home directory
-         sudo_user = os.environ.get('SUDO_USER')
-         if sudo_user:
-             return os.path.join("/home", sudo_user, "Documents")
-         return os.path.join(os.path.expanduser("~"), "Documents")
+    """
+    获取用户文档文件夹路径
+    
+    根据不同操作系统返回相应的文档文件夹路径：
+    - Windows: 通过注册表获取个人文档路径
+    - macOS: ~/Documents
+    - Linux: ~/Documents 或 /home/{user}/Documents
+    
+    Returns:
+        str: 用户文档文件夹的绝对路径
+    """
+    if sys.platform == "win32":
+        try:
+            # 尝试从 Windows 注册表获取文档路径
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders") as key:
+                documents_path, _ = winreg.QueryValueEx(key, "Personal")
+                return documents_path
+        except Exception as e:
+            # 如果注册表读取失败，使用默认路径
+            return os.path.join(os.path.expanduser("~"), "Documents")
+    elif sys.platform == "darwin":
+        # macOS 系统的文档路径
+        return os.path.join(os.path.expanduser("~"), "Documents")
+    else:  # Linux
+        # Linux 系统需要考虑 sudo 用户的情况
+        sudo_user = os.environ.get('SUDO_USER')
+        if sudo_user:
+            return os.path.join("/home", sudo_user, "Documents")
+        return os.path.join(os.path.expanduser("~"), "Documents")
      
 
 def get_cursor_paths(translator=None) -> Tuple[str, str]:
-    """ Get Cursor related paths"""
+    """
+    获取 Cursor 相关文件路径
+    
+    此函数用于定位 Cursor 编辑器的关键文件：
+    - package.json: 包含版本信息
+    - main.js: 主要的 JavaScript 文件，需要修改以绕过限制
+    
+    Args:
+        translator: 翻译器对象，用于多语言支持
+        
+    Returns:
+        Tuple[str, str]: 返回 (package.json路径, main.js路径)
+        
+    Raises:
+        OSError: 当找不到 Cursor 安装路径或关键文件时抛出
+    """
     system = platform.system()
     
-    # Read config file
+    # 读取配置文件
     config = configparser.ConfigParser()
     config_dir = os.path.join(get_user_documents_path(), ".cursor-free-vip")
     config_file = os.path.join(config_dir, "config.ini")
     
-    # Create config directory if it doesn't exist
+    # 如果配置目录不存在则创建
     if not os.path.exists(config_dir):
         os.makedirs(config_dir)
     
-    # Default paths for different systems
+    # 不同系统的默认 Cursor 安装路径
     default_paths = {
-        "Darwin": "/Applications/Cursor.app/Contents/Resources/app",
-        "Windows": os.path.join(os.getenv("LOCALAPPDATA", ""), "Programs", "Cursor", "resources", "app"),
-        "Linux": ["/opt/Cursor/resources/app", "/usr/share/cursor/resources/app", os.path.expanduser("~/.local/share/cursor/resources/app")]
+        "Darwin": "/Applications/Cursor.app/Contents/Resources/app",  # macOS
+        "Windows": os.path.join(os.getenv("LOCALAPPDATA", ""), "Programs", "Cursor", "resources", "app"),  # Windows
+        "Linux": ["/opt/Cursor/resources/app", "/usr/share/cursor/resources/app", os.path.expanduser("~/.local/share/cursor/resources/app")]  # Linux 多个可能路径
     }
     
     if system == "Linux":
@@ -154,9 +211,21 @@ def get_cursor_paths(translator=None) -> Tuple[str, str]:
 
 def get_cursor_machine_id_path(translator=None) -> str:
     """
-    Get Cursor machineId file path based on operating system
+    根据操作系统获取 Cursor machineId 文件路径
+    
+    machineId 文件存储了 Cursor 的机器标识符，不同系统存储位置不同：
+    - Windows: %APPDATA%/Cursor/machineId
+    - macOS: ~/Library/Application Support/Cursor/machineId
+    - Linux: ~/.config/cursor/machineid
+    
+    Args:
+        translator: 翻译器对象，用于多语言支持
+        
     Returns:
-        str: Path to machineId file
+        str: machineId 文件的完整路径
+        
+    Raises:
+        OSError: 当操作系统不支持时抛出
     """
     # Read configuration
     config_dir = os.path.join(get_user_documents_path(), ".cursor-free-vip")
@@ -258,7 +327,21 @@ def get_workbench_cursor_path(translator=None) -> str:
     return main_path
 
 def version_check(version: str, min_version: str = "", max_version: str = "", translator=None) -> bool:
-    """Version number check"""
+    """
+    版本号检查函数
+    
+    检查给定版本号是否符合最小和最大版本要求。
+    版本号格式必须为 "x.y.z" (如 "1.2.3")
+    
+    Args:
+        version (str): 要检查的版本号
+        min_version (str, optional): 最小版本要求
+        max_version (str, optional): 最大版本要求
+        translator: 翻译器对象，用于多语言支持
+        
+    Returns:
+        bool: 版本检查通过返回 True，否则返回 False
+    """
     version_pattern = r"^\d+\.\d+\.\d+$"
     try:
         if not re.match(version_pattern, version):
@@ -505,10 +588,34 @@ def patch_cursor_get_machine_id(translator) -> bool:
         return False
 
 class MachineIDResetter:
+    """
+    Cursor 机器 ID 重置器
+    
+    这个类负责重置 Cursor 编辑器的所有机器标识符，包括：
+    1. JSON 配置文件中的标识符
+    2. SQLite 数据库中的标识符
+    3. 系统级别的机器标识符
+    4. JavaScript 文件的修改
+    
+    使用示例:
+        resetter = MachineIDResetter(translator)
+        success = resetter.reset_machine_ids()
+    """
+    
     def __init__(self, translator=None):
+        """
+        初始化机器 ID 重置器
+        
+        Args:
+            translator: 翻译器对象，用于多语言支持
+            
+        Raises:
+            FileNotFoundError: 当配置文件不存在时抛出
+            NotImplementedError: 当操作系统不支持时抛出
+        """
         self.translator = translator
 
-        # Read configuration
+        # 读取配置文件
         config_dir = os.path.join(get_user_documents_path(), ".cursor-free-vip")
         config_file = os.path.join(config_dir, "config.ini")
         config = configparser.ConfigParser()
@@ -576,19 +683,32 @@ class MachineIDResetter:
             config.write(f)
 
     def generate_new_ids(self):
-        """Generate new machine ID"""
-        # Generate new UUID
+        """
+        生成新的机器标识符
+        
+        生成 Cursor 所需的各种机器标识符：
+        - devDeviceId: 设备 ID (UUID 格式)
+        - machineId: 机器 ID (SHA256 哈希，64字符)
+        - macMachineId: Mac 机器 ID (SHA512 哈希，128字符)
+        - sqmId: SQM ID (大写 UUID 格式，带花括号)
+        - serviceMachineId: 服务机器 ID (与 devDeviceId 相同)
+        
+        Returns:
+            dict: 包含所有新生成标识符的字典
+        """
+        # 生成新的 UUID 作为设备 ID
         dev_device_id = str(uuid.uuid4())
 
-        # Generate new machineId (64 characters of hexadecimal)
+        # 生成新的机器 ID (64字符十六进制)
         machine_id = hashlib.sha256(os.urandom(32)).hexdigest()
 
-        # Generate new macMachineId (128 characters of hexadecimal)
+        # 生成新的 Mac 机器 ID (128字符十六进制)
         mac_machine_id = hashlib.sha512(os.urandom(64)).hexdigest()
 
-        # Generate new sqmId
+        # 生成新的 SQM ID (大写 UUID 格式)
         sqm_id = "{" + str(uuid.uuid4()).upper() + "}"
 
+        # 更新 machineId 文件
         self.update_machine_id_file(dev_device_id)
 
         return {
@@ -596,7 +716,7 @@ class MachineIDResetter:
             "telemetry.macMachineId": mac_machine_id,
             "telemetry.machineId": machine_id,
             "telemetry.sqmId": sqm_id,
-            "storage.serviceMachineId": dev_device_id,  # Add storage.serviceMachineId
+            "storage.serviceMachineId": dev_device_id,  # 添加服务机器 ID
         }
 
     def update_sqlite_db(self, new_ids):
@@ -728,14 +848,31 @@ class MachineIDResetter:
             raise
 
     def reset_machine_ids(self):
-        """Reset machine ID and backup original file"""
+        """
+        重置机器 ID 并备份原始文件
+        
+        这是主要的重置方法，执行以下操作：
+        1. 检查配置文件是否存在和可访问
+        2. 备份原始配置文件
+        3. 生成新的机器标识符
+        4. 更新 JSON 配置文件
+        5. 更新 SQLite 数据库
+        6. 更新系统级标识符
+        7. 修改 Cursor 的 JavaScript 文件
+        8. 根据版本执行相应的补丁操作
+        
+        Returns:
+            bool: 重置成功返回 True，失败返回 False
+        """
         try:
             print(f"{Fore.CYAN}{EMOJI['INFO']} {self.translator.get('reset.checking')}...{Style.RESET_ALL}")
 
+            # 检查配置文件是否存在
             if not os.path.exists(self.db_path):
                 print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.not_found')}: {self.db_path}{Style.RESET_ALL}")
                 return False
 
+            # 检查文件权限
             if not os.access(self.db_path, os.R_OK | os.W_OK):
                 print(f"{Fore.RED}{EMOJI['ERROR']} {self.translator.get('reset.no_permission')}{Style.RESET_ALL}")
                 return False
@@ -835,19 +972,45 @@ class MachineIDResetter:
             return False
 
 def run(translator=None):
+    """
+    运行 Cursor 完全重置工具的主函数
+    
+    这是工具的主入口点，负责：
+    1. 获取配置信息
+    2. 显示程序标题
+    3. 创建并运行机器 ID 重置器
+    4. 等待用户确认完成
+    
+    Args:
+        translator: 翻译器对象，用于多语言支持
+        
+    Returns:
+        bool: 如果配置获取失败返回 False，否则执行重置操作
+    """
+    # 获取配置信息
     config = get_config(translator)
     if not config:
         return False
+        
+    # 显示程序标题
     print(f"\n{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}{EMOJI['RESET']} {translator.get('reset.title')}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
 
-    resetter = MachineIDResetter(translator)  # Correctly pass translator
+    # 创建重置器并执行重置操作
+    resetter = MachineIDResetter(translator)
     resetter.reset_machine_ids()
 
+    # 等待用户确认
     print(f"\n{Fore.CYAN}{'='*50}{Style.RESET_ALL}")
     input(f"{EMOJI['INFO']} {translator.get('reset.press_enter')}...")
 
+# 主程序入口
 if __name__ == "__main__":
+    """
+    直接运行脚本时的入口点
+    
+    从主模块导入翻译器并运行重置工具
+    """
     from main import translator as main_translator
     run(main_translator)
